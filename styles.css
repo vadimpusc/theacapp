@@ -235,6 +235,8 @@ input:disabled, select:disabled, textarea:disabled {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
 }
 
 .button:hover, .icon-button:hover {
@@ -605,9 +607,12 @@ hr.sep {
   .actions > .button {
     flex: 1 1 calc(50% - 4px);
     min-width: calc(50% - 4px);
+    min-height: 48px;
+    font-size: 0.9rem;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    padding: 0 12px;
   }
   .section-head .actions > .button.primary {
     flex: 1 1 100%;
@@ -621,24 +626,76 @@ hr.sep {
     flex: none;
     width: 100%;
     min-width: 0;
+    min-height: 48px;
   }
   .footer-actions {
     flex-wrap: wrap;
+    padding: 12px;
+    gap: 8px;
   }
   .footer-actions > .button {
-    flex: 1 1 calc(50% - 5px);
+    flex: 1 1 calc(50% - 4px);
+    min-height: 48px;
+    font-size: 0.9rem;
   }
   .footer-actions > .button:first-child {
     flex: 1 1 100%;
   }
   .take-actions {
-    flex-wrap: wrap;
+    display: flex;
+    flex-wrap: nowrap;
+    gap: 6px;
   }
   .take-actions > .button {
-    flex: 1 1 auto;
+    flex: 1;
     min-width: 0;
-    font-size: 0.85rem;
-    padding: 0 10px;
+    min-height: 44px;
+    font-size: 0.8rem;
+    padding: 0 8px;
+  }
+  .take-actions > .icon-button {
+    min-width: 44px;
+    width: 44px;
+    min-height: 44px;
+    flex: none;
+  }
+  .day-head {
+    flex-wrap: wrap;
+  }
+  .day-head .actions {
+    width: 100%;
+    margin-top: 10px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+  .day-head .actions > .button {
+    flex: none;
+    width: 100%;
+    min-height: 48px;
+  }
+  .app-shell {
+    padding-left: 12px;
+    padding-right: 12px;
+    padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 160px);
+  }
+  .card {
+    padding: 14px;
+  }
+  .day-card, .take-card {
+    padding: 12px;
+  }
+  input, select, textarea {
+    padding: 14px 12px;
+    font-size: 16px;
+  }
+  .tag-buttons {
+    gap: 6px;
+  }
+  .tag-btn {
+    padding: 10px 12px;
+    font-size: 0.8rem;
+    min-height: 44px;
   }
 }
 
