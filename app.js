@@ -848,68 +848,76 @@ function productionDayHtml(project, day, index) {
 }
 
 function takeHtml(project, day, take, takeIndex) {
+  const lensSummary = take.lensSize === 'Custom' ? (take.customLensSize || 'Custom') : take.lensSize;
+  const filterSummary = take.filter || 'None';
+  const cameraSummary = take.camera === 'Custom' ? (take.customCamera || 'Custom') : take.camera;
+  
   return `
-    <article class="take-card stack">
+    <article class="take-card stack" data-take-id="${take.id}">
       <div class="take-head">
         <div>
-          <p class="take-title">Take ${takeIndex + 1}</p>
-          <p class="muted">Logged ${new Date(take.createdAt || nowIso()).toLocaleString()}</p>
+          <p class="take-title">Take ${takeIndex + 1} <span class="take-summary">· ${escapeHtml(lensSummary)} · ${escapeHtml(filterSummary)}</span></p>
         </div>
-        <div class="actions">
+        <div class="actions take-actions">
+          <button class="icon-button collapse-btn" data-action="toggle-take" data-project-id="${project.id}" data-day-id="${day.id}" data-take-id="${take.id}" aria-label="Expand take">
+            <span class="collapse-icon">+</span>
+          </button>
           <button class="button" data-action="duplicate-take" data-project-id="${project.id}" data-day-id="${day.id}" data-take-id="${take.id}">Duplicate</button>
           <button class="button danger" data-action="delete-take" data-project-id="${project.id}" data-day-id="${day.id}" data-take-id="${take.id}">Delete</button>
         </div>
       </div>
 
-      <div class="grid">
-        <label class="field">
-          <span>Lens size</span>
-          <select data-role="take-field" data-project-id="${project.id}" data-day-id="${day.id}" data-take-id="${take.id}" data-key="lensSize">
-            ${LENS_OPTIONS.map((item) => `<option value="${escapeHtml(item)}" ${take.lensSize === item ? 'selected' : ''}>${escapeHtml(item)}</option>`).join('')}
-          </select>
-        </label>
-
-        <label class="field">
-          <span>Filter</span>
-          <select data-role="take-field" data-project-id="${project.id}" data-day-id="${day.id}" data-take-id="${take.id}" data-key="filter">
-            ${FILTER_OPTIONS.map((item) => `<option value="${escapeHtml(item)}" ${take.filter === item ? 'selected' : ''}>${escapeHtml(item)}</option>`).join('')}
-          </select>
-        </label>
-      </div>
-
-      ${take.lensSize === 'Custom' ? `
+      <div class="take-content" hidden>
         <div class="grid">
           <label class="field">
-            <span>Custom lens size</span>
-            <input type="text" value="${escapeHtml(take.customLensSize || '')}" data-role="take-field" data-project-id="${project.id}" data-day-id="${day.id}" data-take-id="${take.id}" data-key="customLensSize" />
+            <span>Lens size</span>
+            <select data-role="take-field" data-project-id="${project.id}" data-day-id="${day.id}" data-take-id="${take.id}" data-key="lensSize">
+              ${LENS_OPTIONS.map((item) => `<option value="${escapeHtml(item)}" ${take.lensSize === item ? 'selected' : ''}>${escapeHtml(item)}</option>`).join('')}
+            </select>
+          </label>
+
+          <label class="field">
+            <span>Filter</span>
+            <select data-role="take-field" data-project-id="${project.id}" data-day-id="${day.id}" data-take-id="${take.id}" data-key="filter">
+              ${FILTER_OPTIONS.map((item) => `<option value="${escapeHtml(item)}" ${take.filter === item ? 'selected' : ''}>${escapeHtml(item)}</option>`).join('')}
+            </select>
           </label>
         </div>
-      ` : ''}
 
-      <div class="grid">
-        <label class="field">
-          <span>Camera</span>
-          <select data-role="take-field" data-project-id="${project.id}" data-day-id="${day.id}" data-take-id="${take.id}" data-key="camera">
-            ${CAMERA_VARIANT_OPTIONS.map((item) => `<option value="${escapeHtml(item)}" ${take.camera === item ? 'selected' : ''}>${escapeHtml(item)}</option>`).join('')}
-          </select>
-        </label>
-        ${take.camera === 'Custom' ? `
+        ${take.lensSize === 'Custom' ? `
+          <div class="grid">
+            <label class="field">
+              <span>Custom lens size</span>
+              <input type="text" value="${escapeHtml(take.customLensSize || '')}" data-role="take-field" data-project-id="${project.id}" data-day-id="${day.id}" data-take-id="${take.id}" data-key="customLensSize" />
+            </label>
+          </div>
+        ` : ''}
+
+        <div class="grid">
           <label class="field">
-            <span>Custom camera</span>
-            <input type="text" value="${escapeHtml(take.customCamera || '')}" data-role="take-field" data-project-id="${project.id}" data-day-id="${day.id}" data-take-id="${take.id}" data-key="customCamera" />
+            <span>Camera</span>
+            <select data-role="take-field" data-project-id="${project.id}" data-day-id="${day.id}" data-take-id="${take.id}" data-key="camera">
+              ${CAMERA_VARIANT_OPTIONS.map((item) => `<option value="${escapeHtml(item)}" ${take.camera === item ? 'selected' : ''}>${escapeHtml(item)}</option>`).join('')}
+            </select>
           </label>
-        ` : '<div></div>'}
+          ${take.camera === 'Custom' ? `
+            <label class="field">
+              <span>Custom camera</span>
+              <input type="text" value="${escapeHtml(take.customCamera || '')}" data-role="take-field" data-project-id="${project.id}" data-day-id="${day.id}" data-take-id="${take.id}" data-key="customCamera" />
+            </label>
+          ` : '<div></div>'}
+        </div>
+
+        <label class="field">
+          <span>Take notes</span>
+          <textarea data-role="take-field" data-project-id="${project.id}" data-day-id="${day.id}" data-take-id="${take.id}" data-key="takeNotes">${escapeHtml(take.takeNotes || '')}</textarea>
+        </label>
+
+        <label class="field">
+          <span>Camera notes</span>
+          <textarea data-role="take-field" data-project-id="${project.id}" data-day-id="${day.id}" data-take-id="${take.id}" data-key="cameraNotes">${escapeHtml(take.cameraNotes || '')}</textarea>
+        </label>
       </div>
-
-      <label class="field">
-        <span>Take notes</span>
-        <textarea data-role="take-field" data-project-id="${project.id}" data-day-id="${day.id}" data-take-id="${take.id}" data-key="takeNotes">${escapeHtml(take.takeNotes || '')}</textarea>
-      </label>
-
-      <label class="field">
-        <span>Camera notes</span>
-        <textarea data-role="take-field" data-project-id="${project.id}" data-day-id="${day.id}" data-take-id="${take.id}" data-key="cameraNotes">${escapeHtml(take.cameraNotes || '')}</textarea>
-      </label>
     </article>
   `;
 }
@@ -992,6 +1000,17 @@ document.addEventListener('click', async (event) => {
     if (ok) deleteProductionDay(projectId, dayId);
   }
   if (action === 'add-take') addTake(projectId, dayId);
+  if (action === 'toggle-take') {
+    const card = target.closest('.take-card');
+    const content = card?.querySelector('.take-content');
+    const icon = card?.querySelector('.collapse-icon');
+    if (content) {
+      const isHidden = content.hidden;
+      content.hidden = !isHidden;
+      if (icon) icon.textContent = isHidden ? '−' : '+';
+      card.classList.toggle('expanded', isHidden);
+    }
+  }
   if (action === 'duplicate-take') duplicateTake(projectId, dayId, takeId);
   if (action === 'delete-take') {
     const ok = await confirmAction({ title: 'Delete take', message: 'This removes the selected take.', confirmText: 'Delete' });

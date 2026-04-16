@@ -409,6 +409,34 @@ input:disabled, select:disabled, textarea:disabled {
   font-weight: 700;
   margin: 0;
 }
+.take-summary {
+  font-weight: 400;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+.take-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: nowrap;
+}
+.take-actions > .icon-button {
+  min-width: 36px;
+  min-height: 36px;
+  width: 36px;
+  height: 36px;
+  font-size: 1.2rem;
+  font-weight: 300;
+}
+.collapse-icon {
+  display: block;
+  line-height: 1;
+}
+.take-content {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+  animation: fadeIn 0.2s ease;
+}
 .note-box {
   white-space: pre-wrap;
   color: var(--muted);
@@ -515,5 +543,14 @@ hr.sep {
   }
   .footer-actions > .button:first-child {
     flex: 1 1 100%;
+  }
+  .take-actions {
+    flex-wrap: wrap;
+  }
+  .take-actions > .button {
+    flex: 1 1 auto;
+    min-width: 0;
+    font-size: 0.85rem;
+    padding: 0 10px;
   }
 }
