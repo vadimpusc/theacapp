@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self';" />
+  <meta name="theme-color" content="#f4f5f7" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-title" content="AC App" />
+  <meta name="description" content="Fast local note logging for 2nd camera assistants" />
+  <title>AC App</title>
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div id="app"></div>
+
+  <dialog id="confirmDialog" class="dialog">
+    <form method="dialog" class="dialog-card">
+      <h3 id="confirmTitle">Confirm</h3>
+      <p id="confirmMessage"></p>
+      <label class="field hidden" id="confirmInputWrap">
+        <span id="confirmInputLabel">Type to confirm</span>
+        <input id="confirmInput" type="text" autocomplete="off" />
+      </label>
+      <div class="dialog-actions">
+        <button value="cancel" class="button ghost" type="submit">Cancel</button>
+        <button value="confirm" class="button danger" id="confirmAccept" type="submit">Confirm</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="guideDialog" class="dialog guide-dialog">
+    <form method="dialog" class="dialog-card guide-card">
+      <div class="guide-head">
+        <h3>User guide</h3>
+        <button class="icon-button" type="submit" aria-label="Close guide">✕</button>
+      </div>
+      <div class="guide-body">
+        <section>
+          <h4>What this app does</h4>
+          <p>AC App is a local-first PWA for 2nd camera assistants. It stores projects, production days, and take notes directly on your device with autosave.</p>
+        </section>
+        <section>
+          <h4>How to use it</h4>
+          <ol>
+            <li>Create a new project from the home screen.</li>
+            <li>Add production days inside the project.</li>
+            <li>Add takes quickly, update notes, and move on. Everything autosaves.</li>
+            <li>Export a PDF report or save a project JSON backup any time.</li>
+          </ol>
+        </section>
+        <section>
+          <h4>Backup and restore</h4>
+          <p><strong>Save to device</strong> exports one project as JSON. <strong>Backup all</strong> exports all projects in one file. Use <strong>Restore backup</strong> from the home screen to import previously saved data.</p>
+        </section>
+        <section>
+          <h4>Install on phone</h4>
+          <p>Open the app in Safari or Chrome, then use <strong>Add to Home Screen</strong>. It will launch in app style once installed.</p>
+        </section>
+        <section>
+          <h4>Important note</h4>
+          <p>Data is stored on your device. Clearing browser storage or uninstalling the PWA may remove local data, so keep regular backups.</p>
+        </section>
+      </div>
+    </form>
+  </dialog>
+
+  <input id="filePicker" type="file" accept="application/json,.json" hidden />
+  <div id="toast-container" role="status" aria-live="polite"></div>
+  <script src="app.js" type="module"></script>
+</body>
+</html>
