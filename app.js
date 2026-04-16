@@ -112,6 +112,10 @@ function validateProject(project) {
       if (typeof take.lensSize !== 'string' || !LENS_OPTIONS.includes(take.lensSize)) take.lensSize = '50mm';
       if (typeof take.filter !== 'string') take.filter = 'None';
       if (typeof take.camera !== 'string' || !CAMERA_VARIANT_OPTIONS.includes(take.camera)) take.camera = 'Main camera';
+      if (take.isGood !== true && take.isGood !== false && take.isGood !== null) take.isGood = null;
+      if (typeof take.soft !== 'boolean') take.soft = false;
+      if (typeof take.flare !== 'boolean') take.flare = false;
+      if (typeof take.boomIn !== 'boolean') take.boomIn = false;
     });
   });
   return project;
@@ -256,6 +260,10 @@ function baseTake(project) {
     cameraNotes: '',
     camera: 'Main camera',
     customCamera: '',
+    isGood: null,
+    soft: false,
+    flare: false,
+    boomIn: false,
     createdAt: nowIso(),
   };
 }
@@ -480,7 +488,10 @@ function buildProjectReportLines(project) {
     day.takes.forEach((take, takeIndex) => {
       const lens = take.lensSize === 'Custom' ? take.customLensSize || 'Custom' : take.lensSize || '-';
       const camera = take.camera === 'Custom' ? take.customCamera || 'Custom' : take.camera || '-';
-      lines.push(`  Take ${takeIndex + 1} | Lens: ${lens} | Filter: ${take.filter || '-'} | Camera: ${camera}`);
+      const goodMark = take.isGood === true ? ' [GOOD]' : take.isGood === false ? ' [NO GOOD]' : '';
+      const flags = [take.soft ? 'Soft' : '', take.flare ? 'Flare' : '', take.boomIn ? 'Boom in' : ''].filter(Boolean).join(', ');
+      const flagStr = flags ? ` [${flags}]` : '';
+      lines.push(`  Take ${takeIndex + 1} | Lens: ${lens} | Filter: ${take.filter || '-'} | Camera: ${camera}${goodMark}${flagStr}`);
       if (take.takeNotes) wrapText(`Take notes: ${take.takeNotes}`, 88).forEach((line) => lines.push(`    ${line}`));
       if (take.cameraNotes) wrapText(`Camera notes: ${take.cameraNotes}`, 88).forEach((line) => lines.push(`    ${line}`));
       lines.push(`    Logged: ${new Date(take.createdAt || nowIso()).toLocaleString()}`);
@@ -851,12 +862,14 @@ function takeHtml(project, day, take, takeIndex) {
   const lensSummary = take.lensSize === 'Custom' ? (take.customLensSize || 'Custom') : take.lensSize;
   const filterSummary = take.filter || 'None';
   const cameraSummary = take.camera === 'Custom' ? (take.customCamera || 'Custom') : take.camera;
+  const goodLabel = take.isGood === true ? '✓' : take.isGood === false ? '✗' : '';
+  const tagsSummary = [goodLabel, take.soft ? 'Soft' : '', take.flare ? 'Flare' : '', take.boomIn ? 'Boom' : ''].filter(Boolean).join(' · ');
   
   return `
     <article class="take-card stack" data-take-id="${take.id}">
       <div class="take-head">
         <div>
-          <p class="take-title">Take ${takeIndex + 1} <span class="take-summary">· ${escapeHtml(lensSummary)} · ${escapeHtml(filterSummary)}</span></p>
+          <p class="take-title">Take ${takeIndex + 1} <span class="take-summary">${escapeHtml(lensSummary)} · ${escapeHtml(filterSummary)}${tagsSummary ? ' · ' + tagsSummary : ''}</span></p>
         </div>
         <div class="actions take-actions">
           <button class="icon-button collapse-btn" data-action="toggle-take" data-project-id="${project.id}" data-day-id="${day.id}" data-take-id="${take.id}" aria-label="Expand take">
@@ -906,6 +919,17 @@ function takeHtml(project, day, take, takeIndex) {
               <input type="text" value="${escapeHtml(take.customCamera || '')}" data-role="take-field" data-project-id="${project.id}" data-day-id="${day.id}" data-take-id="${take.id}" data-key="customCamera" />
             </label>
           ` : '<div></div>'}
+        </div>
+
+        <div class="take-tags">
+          <span class="field-label">Status</span>
+          <div class="tag-buttons">
+            <button type="button" class="tag-btn ${take.isGood === true ? 'active good' : ''}" data-action="toggle-good" data-project-id="${project.id}" data-day-id="${day.id}" data-take-id="${take.id}" data-value="true">Good</button>
+            <button type="button" class="tag-btn ${take.isGood === false ? 'active bad' : ''}" data-action="toggle-good" data-project-id="${project.id}" data-day-id="${day.id}" data-take-id="${take.id}" data-value="false">No Good</button>
+            <button type="button" class="tag-btn ${take.soft ? 'active warning' : ''}" data-action="toggle-tag" data-project-id="${project.id}" data-day-id="${day.id}" data-take-id="${take.id}" data-key="soft">Soft</button>
+            <button type="button" class="tag-btn ${take.flare ? 'active warning' : ''}" data-action="toggle-tag" data-project-id="${project.id}" data-day-id="${day.id}" data-take-id="${take.id}" data-key="flare">Flare</button>
+            <button type="button" class="tag-btn ${take.boomIn ? 'active warning' : ''}" data-action="toggle-tag" data-project-id="${project.id}" data-day-id="${day.id}" data-take-id="${take.id}" data-key="boomIn">Boom in</button>
+          </div>
         </div>
 
         <label class="field">
@@ -1010,6 +1034,24 @@ document.addEventListener('click', async (event) => {
       if (icon) icon.textContent = isHidden ? '−' : '+';
       card.classList.toggle('expanded', isHidden);
     }
+  }
+  if (action === 'toggle-good') {
+    const value = target.dataset.value === 'true';
+    updateProject(projectId, (project) => {
+      const day = project.productionDays.find((d) => d.id === dayId);
+      const take = day?.takes.find((t) => t.id === takeId);
+      if (take) take.isGood = take.isGood === value ? null : value;
+      return project;
+    });
+  }
+  if (action === 'toggle-tag') {
+    const key = target.dataset.key;
+    updateProject(projectId, (project) => {
+      const day = project.productionDays.find((d) => d.id === dayId);
+      const take = day?.takes.find((t) => t.id === takeId);
+      if (take && key in take) take[key] = !take[key];
+      return project;
+    });
   }
   if (action === 'duplicate-take') duplicateTake(projectId, dayId, takeId);
   if (action === 'delete-take') {

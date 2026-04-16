@@ -437,6 +437,57 @@ input:disabled, select:disabled, textarea:disabled {
   border-top: 1px solid var(--border);
   animation: fadeIn 0.2s ease;
 }
+
+.take-tags {
+  margin: 12px 0;
+}
+
+.field-label {
+  display: block;
+  font-size: 0.88rem;
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+
+.tag-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.tag-btn {
+  padding: 8px 14px;
+  border-radius: 20px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--muted);
+  font-size: 0.85rem;
+  font-weight: 500;
+  min-height: auto;
+  transition: all var(--transition);
+}
+
+.tag-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.tag-btn.active {
+  border-color: transparent;
+  color: #fff;
+}
+
+.tag-btn.active.good {
+  background: var(--success);
+}
+
+.tag-btn.active.bad {
+  background: var(--danger);
+}
+
+.tag-btn.active.warning {
+  background: #e69500;
+}
 .note-box {
   white-space: pre-wrap;
   color: var(--muted);
