@@ -104,6 +104,7 @@ function validateProject(project) {
   project.productionDays.forEach(day => {
     if (!day || typeof day !== 'object') return;
     if (typeof day.prodDay !== 'string') day.prodDay = todayLocal();
+    if (typeof day.expanded !== 'boolean') day.expanded = true;
     if (!Array.isArray(day.takes)) day.takes = [];
     day.takes.forEach(take => {
       if (!take || typeof take !== 'object') return;
@@ -248,6 +249,7 @@ function baseProductionDay() {
     id: uid('day'),
     prodDay: todayLocal(),
     takes: [],
+    expanded: true,
   };
 }
 
@@ -333,7 +335,8 @@ function duplicateProductionDay(projectId, dayId) {
     if (!day) return project;
     const copy = structuredClone(day);
     copy.id = uid('day');
-    copy.takes = copy.takes.map((take) => ({ ...take, id: uid('take'), createdAt: nowIso() }));
+    copy.expanded = false;
+    copy.takes = copy.takes.map((take) => ({ ...take, id: uid('take'), createdAt: nowIso(), expanded: false }));
     const idx = project.productionDays.findIndex((d) => d.id === dayId);
     project.productionDays.splice(idx + 1, 0, copy);
     return project;
@@ -841,36 +844,39 @@ function selectField(key, label, options, value) {
 function productionDayHtml(project, day, index) {
   const dayGood = day.takes.filter(t => t.isGood === true).length;
   const dayNoGood = day.takes.filter(t => t.isGood === false).length;
+  const isExpanded = day.expanded !== false;
   return `
-    <article class="day-card stack">
-      <div class="day-head">
+    <article class="day-card stack${isExpanded ? ' expanded' : ''}">
+      <div class="day-head" data-action="toggle-day" data-project-id="${project.id}" data-day-id="${day.id}">
         <div>
-          <p class="day-title">Production day ${index + 1}</p>
+          <p class="day-title">Production day ${index + 1} <span class="collapse-icon">${isExpanded ? '−' : '+'}</span></p>
           <p class="muted">
             ${day.takes.length} take${day.takes.length === 1 ? '' : 's'}
             ${dayGood > 0 ? ` · <span class="good-count">✓ ${dayGood}</span>` : ''}
             ${dayNoGood > 0 ? ` · <span class="nogood-count">✗ ${dayNoGood}</span>` : ''}
           </p>
         </div>
-        <div class="actions">
-          <button class="button" data-action="duplicate-day" data-project-id="${project.id}" data-day-id="${day.id}">Duplicate</button>
-          <button class="button danger" data-action="delete-day" data-project-id="${project.id}" data-day-id="${day.id}">Delete</button>
+        <div class="actions" onclick="event.stopPropagation()">
+          <button type="button" class="button" data-action="duplicate-day" data-project-id="${project.id}" data-day-id="${day.id}">Duplicate</button>
+          <button type="button" class="button danger" data-action="delete-day" data-project-id="${project.id}" data-day-id="${day.id}">Delete</button>
         </div>
       </div>
 
-      <div class="grid">
-        <label class="field">
-          <span>Prod day (date)</span>
-          <input type="date" value="${escapeHtml(day.prodDay || '')}" data-role="day-field" data-project-id="${project.id}" data-day-id="${day.id}" data-key="prodDay" />
-        </label>
-      </div>
+      <div class="day-content"${isExpanded ? '' : ' hidden'}>
+        <div class="grid">
+          <label class="field">
+            <span>Prod day (date)</span>
+            <input type="date" value="${escapeHtml(day.prodDay || '')}" data-role="day-field" data-project-id="${project.id}" data-day-id="${day.id}" data-key="prodDay" />
+          </label>
+        </div>
 
-      <div class="section-head">
-        <h4>Takes</h4>
-        <button class="button primary" data-action="add-take" data-project-id="${project.id}" data-day-id="${day.id}">Add new take</button>
-      </div>
+        <div class="section-head">
+          <h4>Takes</h4>
+          <button type="button" class="button primary" data-action="add-take" data-project-id="${project.id}" data-day-id="${day.id}">Add new take</button>
+        </div>
 
-      ${day.takes.length ? day.takes.map((take, takeIndex) => takeHtml(project, day, take, takeIndex)).join('') : '<div class="empty">No takes for this day yet.</div>'}
+        ${day.takes.length ? day.takes.map((take, takeIndex) => takeHtml(project, day, take, takeIndex)).join('') : '<div class="empty">No takes for this day yet.</div>'}
+      </div>
     </article>
   `;
 }
@@ -1041,6 +1047,23 @@ document.addEventListener('click', async (event) => {
     }
   }
   if (action === 'add-day') addProductionDay(projectId);
+  if (action === 'toggle-day') {
+    const card = target.closest('.day-card');
+    const content = card?.querySelector('.day-content');
+    const icon = card?.querySelector('.collapse-icon');
+    if (content) {
+      const isHidden = content.hidden;
+      const willExpand = isHidden;
+      content.hidden = !isHidden;
+      if (icon) icon.textContent = willExpand ? '−' : '+';
+      card.classList.toggle('expanded', willExpand);
+      updateProject(projectId, (project) => {
+        const day = project.productionDays.find((d) => d.id === dayId);
+        if (day) day.expanded = willExpand;
+        return project;
+      }, { render: false });
+    }
+  }
   if (action === 'duplicate-day') duplicateProductionDay(projectId, dayId);
   if (action === 'delete-day') {
     const ok = await confirmAction({ title: 'Delete production day', message: 'This removes the day and all takes inside it.', confirmText: 'Delete' });

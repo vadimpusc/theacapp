@@ -418,6 +418,16 @@ input:disabled, select:disabled, textarea:disabled {
   user-select: none;
 }
 
+.day-head .collapse-icon {
+  font-size: 1.1rem;
+  color: var(--muted);
+  margin-left: 4px;
+}
+
+.day-content {
+  animation: fadeIn 0.2s ease;
+}
+
 .take-head:hover {
   opacity: 0.85;
 }
