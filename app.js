@@ -856,9 +856,9 @@ function productionDayHtml(project, day, index) {
             ${dayNoGood > 0 ? ` · <span class="nogood-count">✗ ${dayNoGood}</span>` : ''}
           </p>
         </div>
-        <div class="actions" onclick="event.stopPropagation()">
-          <button type="button" class="button" data-action="duplicate-day" data-project-id="${project.id}" data-day-id="${day.id}">Duplicate</button>
-          <button type="button" class="button danger" data-action="delete-day" data-project-id="${project.id}" data-day-id="${day.id}">Delete</button>
+        <div class="actions">
+          <button type="button" class="button" onclick="event.stopPropagation()" data-action="duplicate-day" data-project-id="${project.id}" data-day-id="${day.id}">Duplicate</button>
+          <button type="button" class="button danger" onclick="event.stopPropagation()" data-action="delete-day" data-project-id="${project.id}" data-day-id="${day.id}">Delete</button>
         </div>
       </div>
 
