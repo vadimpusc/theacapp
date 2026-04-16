@@ -1,7 +1,7 @@
 const DB_NAME = 'ac-app-db';
 const STORE_NAME = 'keyval';
 const STORAGE_KEY = 'ac-app-state';
-const APP_VERSION = '1.0.0';
+const APP_VERSION = '1.0.1';
 
 const CAMERA_OPTIONS = [
   'Alexa Mini', 'Alexa Mini LF', 'Alexa 35', 'RED Epic', 'RED V-Raptor', 'RED Komodo',
@@ -21,11 +21,16 @@ const DEFAULT_STATE = {
   lastSavedAt: null,
 };
 
-let state = structuredClone(DEFAULT_STATE);
+function deepClone(value) {
+  return value == null ? value : JSON.parse(JSON.stringify(value));
+}
+
+let state = deepClone(DEFAULT_STATE);
 let saveTimer = null;
 let dbPromise = null;
 let isLoading = true;
 let isSaving = false;
+let hasPendingSave = false;
 let toastTimeout = null;
 const app = document.getElementById('app');
 const filePicker = document.getElementById('filePicker');
@@ -71,11 +76,11 @@ function escapeHtml(value) {
   const str = String(value);
   if (str.length > 10000) return str.slice(0, 10000);
   return str
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&#39;');
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }
 
 function sanitizeText(text, maxLength = 500) {
@@ -167,18 +172,28 @@ async function idbGet(key) {
 }
 
 async function saveState() {
-  if (isSaving) return;
+  if (isSaving) {
+    hasPendingSave = true;
+    return;
+  }
+
   isSaving = true;
+  hasPendingSave = false;
+
   try {
     state.lastSavedAt = nowIso();
     await idbSet(STORAGE_KEY, JSON.stringify(state));
-    isSaving = false;
   } catch (error) {
     console.error('Save failed:', error);
     showToast('Failed to save. Please try again.', 'error');
+  } finally {
     isSaving = false;
   }
-  render();
+
+  if (hasPendingSave) {
+    hasPendingSave = false;
+    queueMicrotask(saveState);
+  }
 }
 
 async function loadState() {
@@ -187,7 +202,7 @@ async function loadState() {
   try {
     const raw = await idbGet(STORAGE_KEY);
     if (!raw) {
-      state = structuredClone(DEFAULT_STATE);
+      state = deepClone(DEFAULT_STATE);
       await saveState();
       isLoading = false;
       return;
@@ -195,14 +210,17 @@ async function loadState() {
     const parsed = JSON.parse(raw);
     if (!parsed || typeof parsed !== 'object') throw new Error('Invalid state');
     state = {
-      ...structuredClone(DEFAULT_STATE),
+      ...deepClone(DEFAULT_STATE),
       ...parsed,
       settings: { ...DEFAULT_STATE.settings, ...(parsed.settings || {}) },
       projects: Array.isArray(parsed.projects) ? parsed.projects : [],
     };
     state.projects = state.projects.map(p => validateProject(p));
+    if (!state.projects.some((project) => project.id === state.currentProjectId)) {
+      state.currentProjectId = state.projects[0]?.id || null;
+    }
   } catch {
-    state = structuredClone(DEFAULT_STATE);
+    state = deepClone(DEFAULT_STATE);
     showToast('Could not load saved data. Starting fresh.', 'error');
   }
   isLoading = false;
@@ -254,8 +272,8 @@ function baseProductionDay() {
 }
 
 function baseTake(project) {
-  const lastDay = project.productionDays.at(-1);
-  const lastTake = lastDay?.takes?.at(-1);
+  const lastDay = project.productionDays[project.productionDays.length - 1];
+  const lastTake = lastDay && Array.isArray(lastDay.takes) ? lastDay.takes[lastDay.takes.length - 1] : undefined;
   return {
     id: uid('take'),
     lensSize: lastTake?.lensSize || '50mm',
@@ -278,7 +296,7 @@ function baseTake(project) {
 function updateProject(projectId, updater, options = { render: true }) {
   state.projects = state.projects.map((project) => {
     if (project.id !== projectId) return project;
-    const updated = updater(structuredClone(project));
+    const updated = updater(deepClone(project));
     updated.updatedAt = nowIso();
     return updated;
   });
@@ -297,7 +315,7 @@ function addProject() {
 function duplicateProject(projectId) {
   const original = state.projects.find((p) => p.id === projectId);
   if (!original) return;
-  const copy = structuredClone(original);
+  const copy = deepClone(original);
   copy.id = uid('project');
   copy.projectName = `${original.projectName || 'Untitled Project'} Copy`;
   copy.createdAt = nowIso();
@@ -333,7 +351,7 @@ function duplicateProductionDay(projectId, dayId) {
   updateProject(projectId, (project) => {
     const day = project.productionDays.find((d) => d.id === dayId);
     if (!day) return project;
-    const copy = structuredClone(day);
+    const copy = deepClone(day);
     copy.id = uid('day');
     copy.expanded = false;
     copy.takes = copy.takes.map((take) => ({ ...take, id: uid('take'), createdAt: nowIso(), expanded: false }));
@@ -364,7 +382,7 @@ function duplicateTake(projectId, dayId, takeId) {
     const day = project.productionDays.find((d) => d.id === dayId);
     const take = day?.takes.find((t) => t.id === takeId);
     if (!take || !day) return project;
-    const copy = structuredClone(take);
+    const copy = deepClone(take);
     copy.id = uid('take');
     copy.createdAt = nowIso();
     copy.expanded = false;
@@ -435,6 +453,7 @@ function restoreFromFile(file) {
       
       if (Array.isArray(parsed.projects)) {
         state.projects = parsed.projects.map(p => validateProject(p));
+        state.currentProjectId = state.projects[0]?.id || null;
       } else if (parsed.id && typeof parsed.projectName === 'string') {
         const validated = validateProject(parsed);
         if (validated) {
@@ -857,8 +876,8 @@ function productionDayHtml(project, day, index) {
           </p>
         </div>
         <div class="actions">
-          <button type="button" class="button" onclick="event.stopPropagation()" data-action="duplicate-day">Duplicate</button>
-          <button type="button" class="button danger" onclick="event.stopPropagation()" data-action="delete-day">Delete</button>
+          <button type="button" class="button" data-action="duplicate-day">Duplicate</button>
+          <button type="button" class="button danger" data-action="delete-day">Delete</button>
         </div>
       </div>
 
@@ -1010,7 +1029,7 @@ function setPathValue(obj, path, value) {
   for (let i = 0; i < keys.length - 1; i++) {
     target = target[keys[i]];
   }
-  target[keys.at(-1)] = value;
+  target[keys[keys.length - 1]] = value;
 }
 
 document.addEventListener('click', async (event) => {
@@ -1019,7 +1038,7 @@ document.addEventListener('click', async (event) => {
   const action = target.dataset.action;
   const projectId = target.dataset.projectId || target.closest('[data-project-id]')?.dataset.projectId;
   const dayId = target.dataset.dayId || target.closest('[data-day-id]')?.dataset.dayId;
-  const takeId = target.dataset.takeId;
+  const takeId = target.dataset.takeId || target.closest('[data-take-id]')?.dataset.takeId;
 
   if (action === 'add-project') addProject();
   if (action === 'open-project') { state.currentProjectId = projectId; render(); debounceSave(); }
@@ -1038,7 +1057,7 @@ document.addEventListener('click', async (event) => {
   if (action === 'reset-all') {
     const ok = await confirmAction({ title: 'Reset all data', message: 'This permanently removes every stored project from this device.', confirmText: 'Erase all', requireText: 'RESET' });
     if (ok) {
-      state = structuredClone(DEFAULT_STATE);
+      state = deepClone(DEFAULT_STATE);
       await saveState();
       render();
       showToast('All data has been reset.');
@@ -1167,16 +1186,66 @@ filePicker.addEventListener('change', () => {
 });
 
 if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('./sw.js').catch(() => {});
+  window.addEventListener('load', async () => {
+    try {
+      const registration = await navigator.serviceWorker.register('./sw.js');
+
+      const promptWorkerToActivate = (worker) => {
+        if (worker) worker.postMessage({ type: 'SKIP_WAITING' });
+      };
+
+      if (registration.waiting) promptWorkerToActivate(registration.waiting);
+
+      registration.addEventListener('updatefound', () => {
+        const installingWorker = registration.installing;
+        if (!installingWorker) return;
+        installingWorker.addEventListener('statechange', () => {
+          if (installingWorker.state === 'installed' && navigator.serviceWorker.controller) {
+            promptWorkerToActivate(registration.waiting || installingWorker);
+          }
+        });
+      });
+
+      let refreshing = false;
+      navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if (refreshing) return;
+        refreshing = true;
+        window.location.reload();
+      });
+
+      window.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') {
+          registration.update().catch(() => {});
+        }
+      });
+    } catch {
+      // Service worker registration failed.
+    }
   });
 }
 
-(async function init() {
-  await loadState();
-  document.documentElement.dataset.theme = state.settings.theme;
-  render();
-})();
+async function init() {
+  try {
+    await loadState();
+    document.documentElement.dataset.theme = state.settings.theme;
+    render();
+  } catch (error) {
+    console.error('App failed to start:', error);
+    if (app) {
+      app.innerHTML = `
+        <div class="loading-view">
+          <div class="card" style="max-width:640px;text-align:left;">
+            <h2 style="margin-top:0;">App could not start</h2>
+            <p>Please hard refresh once. If this still happens, remove the old installed app and reopen the latest version.</p>
+            <p><strong>Error:</strong> ${escapeHtml(error && error.message ? error.message : 'Unknown startup error')}</p>
+          </div>
+        </div>
+      `;
+    }
+  }
+}
+
+init();
 
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
