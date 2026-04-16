@@ -361,6 +361,7 @@ function duplicateTake(projectId, dayId, takeId) {
     const copy = structuredClone(take);
     copy.id = uid('take');
     copy.createdAt = nowIso();
+    copy.expanded = false;
     const idx = day.takes.findIndex((t) => t.id === takeId);
     day.takes.splice(idx + 1, 0, copy);
     return project;
@@ -874,11 +875,11 @@ function takeHtml(project, day, take, takeIndex) {
           <p class="take-title">Take ${takeIndex + 1} <span class="take-summary">${escapeHtml(lensSummary)} · ${escapeHtml(filterSummary)}${tagsSummary ? ' · ' + tagsSummary : ''}</span></p>
         </div>
         <div class="actions take-actions">
-          <button class="icon-button collapse-btn" data-action="toggle-take" data-project-id="${project.id}" data-day-id="${day.id}" data-take-id="${take.id}" aria-label="Toggle take">
+          <button type="button" class="icon-button collapse-btn" data-action="toggle-take" data-project-id="${project.id}" data-day-id="${day.id}" data-take-id="${take.id}" aria-label="Toggle take">
             <span class="collapse-icon">${isExpanded ? '−' : '+'}</span>
           </button>
-          <button class="button" data-action="duplicate-take" data-project-id="${project.id}" data-day-id="${day.id}" data-take-id="${take.id}">Duplicate</button>
-          <button class="button danger" data-action="delete-take" data-project-id="${project.id}" data-day-id="${day.id}" data-take-id="${take.id}">Delete</button>
+          <button type="button" class="button" data-action="duplicate-take" data-project-id="${project.id}" data-day-id="${day.id}" data-take-id="${take.id}">Duplicate</button>
+          <button type="button" class="button danger" data-action="delete-take" data-project-id="${project.id}" data-day-id="${day.id}" data-take-id="${take.id}">Delete</button>
         </div>
       </div>
 
