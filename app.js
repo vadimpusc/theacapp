@@ -116,6 +116,7 @@ function validateProject(project) {
       if (typeof take.soft !== 'boolean') take.soft = false;
       if (typeof take.flare !== 'boolean') take.flare = false;
       if (typeof take.boomIn !== 'boolean') take.boomIn = false;
+      if (typeof take.expanded !== 'boolean') take.expanded = false;
     });
   });
   return project;
@@ -264,6 +265,7 @@ function baseTake(project) {
     soft: false,
     flare: false,
     boomIn: false,
+    expanded: false,
     createdAt: nowIso(),
   };
 }
@@ -861,26 +863,26 @@ function productionDayHtml(project, day, index) {
 function takeHtml(project, day, take, takeIndex) {
   const lensSummary = take.lensSize === 'Custom' ? (take.customLensSize || 'Custom') : take.lensSize;
   const filterSummary = take.filter || 'None';
-  const cameraSummary = take.camera === 'Custom' ? (take.customCamera || 'Custom') : take.camera;
   const goodLabel = take.isGood === true ? '✓' : take.isGood === false ? '✗' : '';
   const tagsSummary = [goodLabel, take.soft ? 'Soft' : '', take.flare ? 'Flare' : '', take.boomIn ? 'Boom' : ''].filter(Boolean).join(' · ');
+  const isExpanded = take.expanded !== false;
   
   return `
-    <article class="take-card stack" data-take-id="${take.id}">
-      <div class="take-head">
+    <article class="take-card stack${isExpanded ? ' expanded' : ''}" data-take-id="${take.id}">
+      <div class="take-head" data-action="toggle-take" data-project-id="${project.id}" data-day-id="${day.id}" data-take-id="${take.id}">
         <div>
           <p class="take-title">Take ${takeIndex + 1} <span class="take-summary">${escapeHtml(lensSummary)} · ${escapeHtml(filterSummary)}${tagsSummary ? ' · ' + tagsSummary : ''}</span></p>
         </div>
         <div class="actions take-actions">
-          <button class="icon-button collapse-btn" data-action="toggle-take" data-project-id="${project.id}" data-day-id="${day.id}" data-take-id="${take.id}" aria-label="Expand take">
-            <span class="collapse-icon">+</span>
+          <button class="icon-button collapse-btn" data-action="toggle-take" data-project-id="${project.id}" data-day-id="${day.id}" data-take-id="${take.id}" aria-label="Toggle take">
+            <span class="collapse-icon">${isExpanded ? '−' : '+'}</span>
           </button>
           <button class="button" data-action="duplicate-take" data-project-id="${project.id}" data-day-id="${day.id}" data-take-id="${take.id}">Duplicate</button>
           <button class="button danger" data-action="delete-take" data-project-id="${project.id}" data-day-id="${day.id}" data-take-id="${take.id}">Delete</button>
         </div>
       </div>
 
-      <div class="take-content" hidden>
+      <div class="take-content"${isExpanded ? '' : ' hidden'}>
         <div class="grid">
           <label class="field">
             <span>Lens size</span>
@@ -1030,9 +1032,16 @@ document.addEventListener('click', async (event) => {
     const icon = card?.querySelector('.collapse-icon');
     if (content) {
       const isHidden = content.hidden;
+      const willExpand = isHidden;
       content.hidden = !isHidden;
-      if (icon) icon.textContent = isHidden ? '−' : '+';
-      card.classList.toggle('expanded', isHidden);
+      if (icon) icon.textContent = willExpand ? '−' : '+';
+      card.classList.toggle('expanded', willExpand);
+      updateProject(projectId, (project) => {
+        const day = project.productionDays.find((d) => d.id === dayId);
+        const take = day?.takes.find((t) => t.id === takeId);
+        if (take) take.expanded = willExpand;
+        return project;
+      }, { render: false });
     }
   }
   if (action === 'toggle-good') {
