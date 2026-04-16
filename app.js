@@ -846,8 +846,8 @@ function productionDayHtml(project, day, index) {
   const dayNoGood = day.takes.filter(t => t.isGood === false).length;
   const isExpanded = day.expanded !== false;
   return `
-    <article class="day-card stack${isExpanded ? ' expanded' : ''}">
-      <div class="day-head" data-action="toggle-day" data-project-id="${project.id}" data-day-id="${day.id}">
+    <article class="day-card stack${isExpanded ? ' expanded' : ''}" data-project-id="${project.id}" data-day-id="${day.id}">
+      <div class="day-head" data-action="toggle-day">
         <div>
           <p class="day-title">Production day ${index + 1} <span class="collapse-icon">${isExpanded ? '−' : '+'}</span></p>
           <p class="muted">
@@ -857,8 +857,8 @@ function productionDayHtml(project, day, index) {
           </p>
         </div>
         <div class="actions">
-          <button type="button" class="button" onclick="event.stopPropagation()" data-action="duplicate-day" data-project-id="${project.id}" data-day-id="${day.id}">Duplicate</button>
-          <button type="button" class="button danger" onclick="event.stopPropagation()" data-action="delete-day" data-project-id="${project.id}" data-day-id="${day.id}">Delete</button>
+          <button type="button" class="button" onclick="event.stopPropagation()" data-action="duplicate-day">Duplicate</button>
+          <button type="button" class="button danger" onclick="event.stopPropagation()" data-action="delete-day">Delete</button>
         </div>
       </div>
 
@@ -890,17 +890,17 @@ function takeHtml(project, day, take, takeIndex) {
   const takeTitle = take.label ? `Take ${takeIndex + 1}: ${escapeHtml(take.label)}` : `Take ${takeIndex + 1}`;
   
   return `
-    <article class="take-card stack${isExpanded ? ' expanded' : ''}" data-take-id="${take.id}">
-      <div class="take-head" data-action="toggle-take" data-project-id="${project.id}" data-day-id="${day.id}" data-take-id="${take.id}">
+    <article class="take-card stack${isExpanded ? ' expanded' : ''}" data-project-id="${project.id}" data-day-id="${day.id}" data-take-id="${take.id}">
+      <div class="take-head" data-action="toggle-take">
         <div>
           <p class="take-title">${takeTitle} <span class="take-summary">${escapeHtml(lensSummary)} · ${escapeHtml(filterSummary)}${tagsSummary ? ' · ' + tagsSummary : ''}</span></p>
         </div>
         <div class="actions take-actions">
-          <button type="button" class="icon-button collapse-btn" data-action="toggle-take" data-project-id="${project.id}" data-day-id="${day.id}" data-take-id="${take.id}" aria-label="Toggle take">
+          <button type="button" class="icon-button collapse-btn" data-action="toggle-take" aria-label="Toggle take">
             <span class="collapse-icon">${isExpanded ? '−' : '+'}</span>
           </button>
-          <button type="button" class="button" data-action="duplicate-take" data-project-id="${project.id}" data-day-id="${day.id}" data-take-id="${take.id}">Duplicate</button>
-          <button type="button" class="button danger" data-action="delete-take" data-project-id="${project.id}" data-day-id="${day.id}" data-take-id="${take.id}">Delete</button>
+          <button type="button" class="button" data-action="duplicate-take">Duplicate</button>
+          <button type="button" class="button danger" data-action="delete-take">Delete</button>
         </div>
       </div>
 
@@ -1017,8 +1017,8 @@ document.addEventListener('click', async (event) => {
   const target = event.target.closest('[data-action]');
   if (!target) return;
   const action = target.dataset.action;
-  const projectId = target.dataset.projectId;
-  const dayId = target.dataset.dayId;
+  const projectId = target.dataset.projectId || target.closest('[data-project-id]')?.dataset.projectId;
+  const dayId = target.dataset.dayId || target.closest('[data-day-id]')?.dataset.dayId;
   const takeId = target.dataset.takeId;
 
   if (action === 'add-project') addProject();
