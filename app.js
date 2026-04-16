@@ -117,6 +117,8 @@ function validateProject(project) {
       if (typeof take.flare !== 'boolean') take.flare = false;
       if (typeof take.boomIn !== 'boolean') take.boomIn = false;
       if (typeof take.expanded !== 'boolean') take.expanded = false;
+      if (typeof take.label !== 'string') take.label = '';
+      if (take.label && take.label.length > 50) take.label = take.label.slice(0, 50);
     });
   });
   return project;
@@ -266,6 +268,7 @@ function baseTake(project) {
     flare: false,
     boomIn: false,
     expanded: false,
+    label: '',
     createdAt: nowIso(),
   };
 }
@@ -362,6 +365,7 @@ function duplicateTake(projectId, dayId, takeId) {
     copy.id = uid('take');
     copy.createdAt = nowIso();
     copy.expanded = false;
+    copy.label = 'Copy';
     const idx = day.takes.findIndex((t) => t.id === takeId);
     day.takes.splice(idx + 1, 0, copy);
     return project;
@@ -597,7 +601,9 @@ function exportProjectPdf(project) {
 function projectStats(project) {
   const days = project.productionDays.length;
   const takes = project.productionDays.reduce((sum, day) => sum + day.takes.length, 0);
-  return { days, takes };
+  const goodTakes = project.productionDays.reduce((sum, day) => sum + day.takes.filter(t => t.isGood === true).length, 0);
+  const noGoodTakes = project.productionDays.reduce((sum, day) => sum + day.takes.filter(t => t.isGood === false).length, 0);
+  return { days, takes, goodTakes, noGoodTakes };
 }
 
 function formatDateTime(value) {
@@ -648,6 +654,8 @@ function homeView() {
           <div class="mini-meta">
             <span class="pill">${stats.days} day${stats.days === 1 ? '' : 's'}</span>
             <span class="pill">${stats.takes} take${stats.takes === 1 ? '' : 's'}</span>
+            ${stats.goodTakes > 0 ? `<span class="pill good">✓ ${stats.goodTakes}</span>` : ''}
+            ${stats.noGoodTakes > 0 ? `<span class="pill bad">✗ ${stats.noGoodTakes}</span>` : ''}
           </div>
         </div>
         <div class="project-meta">
@@ -831,12 +839,18 @@ function selectField(key, label, options, value) {
 }
 
 function productionDayHtml(project, day, index) {
+  const dayGood = day.takes.filter(t => t.isGood === true).length;
+  const dayNoGood = day.takes.filter(t => t.isGood === false).length;
   return `
     <article class="day-card stack">
       <div class="day-head">
         <div>
           <p class="day-title">Production day ${index + 1}</p>
-          <p class="muted">${day.takes.length} take${day.takes.length === 1 ? '' : 's'}</p>
+          <p class="muted">
+            ${day.takes.length} take${day.takes.length === 1 ? '' : 's'}
+            ${dayGood > 0 ? ` · <span class="good-count">✓ ${dayGood}</span>` : ''}
+            ${dayNoGood > 0 ? ` · <span class="nogood-count">✗ ${dayNoGood}</span>` : ''}
+          </p>
         </div>
         <div class="actions">
           <button class="button" data-action="duplicate-day" data-project-id="${project.id}" data-day-id="${day.id}">Duplicate</button>
@@ -867,12 +881,13 @@ function takeHtml(project, day, take, takeIndex) {
   const goodLabel = take.isGood === true ? '✓' : take.isGood === false ? '✗' : '';
   const tagsSummary = [goodLabel, take.soft ? 'Soft' : '', take.flare ? 'Flare' : '', take.boomIn ? 'Boom' : ''].filter(Boolean).join(' · ');
   const isExpanded = take.expanded !== false;
+  const takeTitle = take.label ? `Take ${takeIndex + 1}: ${escapeHtml(take.label)}` : `Take ${takeIndex + 1}`;
   
   return `
     <article class="take-card stack${isExpanded ? ' expanded' : ''}" data-take-id="${take.id}">
       <div class="take-head" data-action="toggle-take" data-project-id="${project.id}" data-day-id="${day.id}" data-take-id="${take.id}">
         <div>
-          <p class="take-title">Take ${takeIndex + 1} <span class="take-summary">${escapeHtml(lensSummary)} · ${escapeHtml(filterSummary)}${tagsSummary ? ' · ' + tagsSummary : ''}</span></p>
+          <p class="take-title">${takeTitle} <span class="take-summary">${escapeHtml(lensSummary)} · ${escapeHtml(filterSummary)}${tagsSummary ? ' · ' + tagsSummary : ''}</span></p>
         </div>
         <div class="actions take-actions">
           <button type="button" class="icon-button collapse-btn" data-action="toggle-take" data-project-id="${project.id}" data-day-id="${day.id}" data-take-id="${take.id}" aria-label="Toggle take">
@@ -884,6 +899,11 @@ function takeHtml(project, day, take, takeIndex) {
       </div>
 
       <div class="take-content"${isExpanded ? '' : ' hidden'}>
+        <label class="field">
+          <span>Take label (optional)</span>
+          <input type="text" value="${escapeHtml(take.label || '')}" data-role="take-field" data-project-id="${project.id}" data-day-id="${day.id}" data-take-id="${take.id}" data-key="label" placeholder="e.g. Copy, Wide, Close-up" autocomplete="off" />
+        </label>
+
         <div class="grid">
           <label class="field">
             <span>Lens size</span>

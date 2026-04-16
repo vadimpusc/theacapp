@@ -333,6 +333,16 @@ input:disabled, select:disabled, textarea:disabled {
   border: 1px solid var(--border);
   font-size: 0.82rem;
 }
+.pill.good {
+  background: var(--success-soft);
+  color: var(--success);
+  border-color: var(--success);
+}
+.pill.bad {
+  background: var(--danger-soft);
+  color: var(--danger);
+  border-color: var(--danger);
+}
 .helper {
   color: var(--muted);
   font-size: 0.87rem;
@@ -442,6 +452,16 @@ input:disabled, select:disabled, textarea:disabled {
   padding-top: 12px;
   border-top: 1px solid var(--border);
   animation: fadeIn 0.2s ease;
+}
+
+.good-count {
+  color: var(--success);
+  font-weight: 600;
+}
+
+.nogood-count {
+  color: var(--danger);
+  font-weight: 600;
 }
 
 .take-tags {
@@ -610,4 +630,25 @@ hr.sep {
     font-size: 0.85rem;
     padding: 0 10px;
   }
+}
+
+.app-footer {
+  text-align: center;
+  padding: 20px 16px;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.app-footer p {
+  margin: 0;
+}
+
+.app-footer a {
+  color: var(--accent);
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.app-footer a:hover {
+  text-decoration: underline;
 }
