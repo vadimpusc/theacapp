@@ -1,7 +1,7 @@
 const DB_NAME = 'ac-app-db';
 const STORE_NAME = 'keyval';
 const STORAGE_KEY = 'ac-app-state';
-const APP_VERSION = '1.0.1';
+const APP_VERSION = '2.5.0';
 
 const CAMERA_OPTIONS = [
   'Alexa Mini', 'Alexa Mini LF', 'Alexa 35', 'RED Epic', 'RED V-Raptor', 'RED Komodo',
@@ -11,6 +11,7 @@ const FRAME_RATE_OPTIONS = ['23.976', '24', '25', '29.97', '30', '48', '50', '59
 const LUT_OPTIONS = ['No', 'Yes'];
 const FILTER_OPTIONS = ['None', 'ND .3', 'ND .6', 'ND .9', 'ND 1.2', 'Polarizer', 'Black Pro-Mist 1/8', 'Black Pro-Mist 1/4', 'Custom'];
 const LENS_OPTIONS = ['14mm', '18mm', '21mm', '24mm', '25mm', '27mm', '32mm', '35mm', '40mm', '50mm', '65mm', '75mm', '85mm', '100mm', '135mm', 'Custom'];
+const LENS_SPEED_OPTIONS = ['T1.3', 'T1.4', 'T1.5', 'T1.7', 'T1.8', 'T2', 'T2.3', 'T2.5', 'T2.8', 'T3.5', 'T4', 'T4.4', 'T5.6', 'Custom'];
 const CAMERA_VARIANT_OPTIONS = ['Main camera', 'A Cam', 'B Cam', 'Custom'];
 
 const DEFAULT_STATE = {
@@ -19,6 +20,7 @@ const DEFAULT_STATE = {
   projects: [],
   currentProjectId: null,
   lastSavedAt: null,
+  focusTakeId: null,
 };
 
 function deepClone(value) {
@@ -115,10 +117,30 @@ function validateProject(project) {
       if (!take || typeof take !== 'object') return;
       if (typeof take.takeNotes === 'string' && take.takeNotes.length > 2000) take.takeNotes = take.takeNotes.slice(0, 2000);
       if (typeof take.cameraNotes === 'string' && take.cameraNotes.length > 2000) take.cameraNotes = take.cameraNotes.slice(0, 2000);
+      if (typeof take.scene === 'string' && take.scene && !take.sceneNumber) {
+        take.sceneNumber = take.scene;
+        delete take.scene;
+      }
+      if (typeof take.sceneNumber !== 'string') take.sceneNumber = '';
+      if (take.sceneNumber && take.sceneNumber.length > 20) take.sceneNumber = take.sceneNumber.slice(0, 20);
+      if (typeof take.setupLetter !== 'string') take.setupLetter = '';
+      if (take.setupLetter && take.setupLetter.length > 10) take.setupLetter = take.setupLetter.slice(0, 10);
+      if (typeof take.takeNumber !== 'number' || isNaN(take.takeNumber)) take.takeNumber = 1;
+      if (take.takeNumber < 1) take.takeNumber = 1;
       if (typeof take.lensSize !== 'string' || !LENS_OPTIONS.includes(take.lensSize)) take.lensSize = '50mm';
+      if (typeof take.lensSpeed !== 'string' || !LENS_SPEED_OPTIONS.includes(take.lensSpeed)) take.lensSpeed = 'T2.8';
       if (typeof take.filter !== 'string') take.filter = 'None';
       if (typeof take.camera !== 'string' || !CAMERA_VARIANT_OPTIONS.includes(take.camera)) take.camera = 'Main camera';
-      if (take.isGood !== true && take.isGood !== false && take.isGood !== null) take.isGood = null;
+      if (typeof take.status !== 'string') {
+        if (take.isGood === true) take.status = 'good';
+        else if (take.isGood === false) take.status = 'nogood';
+        else take.status = '';
+        delete take.isGood;
+      }
+      if (!['good', 'nogood', 'soft', 'flare', 'boom', ''].includes(take.status)) take.status = '';
+      if (take.status === 'soft' && typeof take.soft !== 'boolean') take.soft = true;
+      if (take.status === 'flare' && typeof take.flare !== 'boolean') take.flare = true;
+      if (take.status === 'boom' && typeof take.boomIn !== 'boolean') take.boomIn = true;
       if (typeof take.soft !== 'boolean') take.soft = false;
       if (typeof take.flare !== 'boolean') take.flare = false;
       if (typeof take.boomIn !== 'boolean') take.boomIn = false;
@@ -274,16 +296,22 @@ function baseProductionDay() {
 function baseTake(project) {
   const lastDay = project.productionDays[project.productionDays.length - 1];
   const lastTake = lastDay && Array.isArray(lastDay.takes) ? lastDay.takes[lastDay.takes.length - 1] : undefined;
+  const nextTakeNum = lastTake ? (Number(lastTake.takeNumber) || 0) + 1 : 1;
   return {
     id: uid('take'),
+    sceneNumber: lastTake?.sceneNumber || '',
+    setupLetter: lastTake?.setupLetter || '',
+    takeNumber: nextTakeNum,
     lensSize: lastTake?.lensSize || '50mm',
     customLensSize: lastTake?.customLensSize || '',
+    lensSpeed: lastTake?.lensSpeed || 'T2.8',
+    customLensSpeed: lastTake?.customLensSpeed || '',
     filter: lastTake?.filter || 'None',
     takeNotes: '',
     cameraNotes: '',
     camera: 'Main camera',
     customCamera: '',
-    isGood: null,
+    status: '',
     soft: false,
     flare: false,
     boomIn: false,
@@ -369,10 +397,15 @@ function deleteProductionDay(projectId, dayId) {
 }
 
 function addTake(projectId, dayId) {
+  const newTakeId = uid('take');
+  state.focusTakeId = newTakeId;
   updateProject(projectId, (project) => {
     const day = project.productionDays.find((d) => d.id === dayId);
     if (!day) return project;
-    day.takes.unshift(baseTake(project));
+    const newTake = baseTake(project);
+    newTake.id = newTakeId;
+    newTake.expanded = true;
+    day.takes.unshift(newTake);
     return project;
   });
 }
@@ -386,7 +419,7 @@ function duplicateTake(projectId, dayId, takeId) {
     copy.id = uid('take');
     copy.createdAt = nowIso();
     copy.expanded = false;
-    copy.label = 'Copy';
+    copy.takeNumber = (Number(copy.takeNumber) || 0) + 1;
     const idx = day.takes.findIndex((t) => t.id === takeId);
     day.takes.splice(idx + 1, 0, copy);
     return project;
@@ -480,53 +513,66 @@ function pdfEscape(text) {
   return String(text ?? '').replace(/\\/g, '\\\\').replace(/\(/g, '\\(').replace(/\)/g, '\\)');
 }
 
-function buildProjectReportLines(project) {
-  const lines = [];
-  lines.push(`Project: ${project.projectName || '-'}`);
-  lines.push(`Prod. Company: ${project.prodCompany || '-'}`);
-  lines.push(`Director: ${project.director || '-'}`);
-  lines.push(`DP: ${project.dp || '-'}`);
-  lines.push(`1st AC: ${project.firstACName || '-'}`);
-  lines.push(`2nd AC: ${project.secondACName || '-'}`);
-  lines.push(`Camera trainee: ${project.cameraTraineeName || '-'}`);
-  lines.push(`Camera: ${project.camera === 'Custom' ? project.customCamera || 'Custom' : project.camera || '-'}`);
-  lines.push(`Frame rate: ${project.frameRate || '-'}`);
-  lines.push(`LUT: ${project.lutUsed === 'Yes' ? (project.lutName || 'Yes') : 'No'}`);
-  lines.push(`B Unit: ${project.hasBUnit ? 'Yes' : 'No'}`);
+function buildProjectReportSections(project) {
+  const sections = [];
+  const stats = projectStats(project);
+  sections.push({
+    type: 'header',
+    title: project.projectName || 'Untitled Project',
+    subtitle: `${project.prodCompany || 'No production company'} | ${stats.takes} takes | ${stats.goodTakes} good | ${stats.noGoodTakes} no good`,
+  });
+  sections.push({
+    type: 'info',
+    items: [
+      { label: 'Director', value: project.director || '-' },
+      { label: 'DP', value: project.dp || '-' },
+      { label: '1st AC', value: project.firstACName || '-' },
+      { label: '2nd AC', value: project.secondACName || '-' },
+      { label: 'Camera', value: project.camera === 'Custom' ? project.customCamera || 'Custom' : project.camera || '-' },
+      { label: 'Frame Rate', value: project.frameRate || '-' },
+      { label: 'LUT', value: project.lutUsed === 'Yes' ? (project.lutName || 'Yes') : 'No' },
+    ],
+  });
   if (project.hasBUnit) {
-    lines.push(`B Unit DP: ${project.bUnit.dp || '-'}`);
-    lines.push(`B Unit 1st AC: ${project.bUnit.firstACName || '-'}`);
-    lines.push(`B Unit 2nd AC: ${project.bUnit.secondACName || '-'}`);
-    lines.push(`B Unit trainee: ${project.bUnit.cameraTraineeName || '-'}`);
+    sections.push({
+      type: 'info',
+      title: 'B Unit',
+      items: [
+        { label: 'DP', value: project.bUnit.dp || '-' },
+        { label: '1st AC', value: project.bUnit.firstACName || '-' },
+        { label: '2nd AC', value: project.bUnit.secondACName || '-' },
+      ],
+    });
   }
   if (project.extraNotes) {
-    lines.push('');
-    lines.push('Project notes:');
-    wrapText(project.extraNotes, 92).forEach((line) => lines.push(line));
+    sections.push({ type: 'notes', title: 'Project Notes', content: project.extraNotes });
   }
-  lines.push('');
-  lines.push(`Production days: ${project.productionDays.length}`);
-  lines.push('');
   project.productionDays.forEach((day, dayIndex) => {
-    lines.push(`Day ${dayIndex + 1}  |  Date: ${day.prodDay || '-'}`);
-    if (!day.takes.length) {
-      lines.push('  No takes logged');
-      lines.push('');
-      return;
-    }
-    day.takes.forEach((take, takeIndex) => {
-      const lens = take.lensSize === 'Custom' ? take.customLensSize || 'Custom' : take.lensSize || '-';
-      const camera = take.camera === 'Custom' ? take.customCamera || 'Custom' : take.camera || '-';
-      const goodMark = take.isGood === true ? ' [GOOD]' : take.isGood === false ? ' [NO GOOD]' : '';
-      const flags = [take.soft ? 'Soft' : '', take.flare ? 'Flare' : '', take.boomIn ? 'Boom in' : ''].filter(Boolean).join(', ');
-      const flagStr = flags ? ` [${flags}]` : '';
-      lines.push(`  Take ${takeIndex + 1} | Lens: ${lens} | Filter: ${take.filter || '-'} | Camera: ${camera}${goodMark}${flagStr}`);
-      if (take.takeNotes) wrapText(`Take notes: ${take.takeNotes}`, 88).forEach((line) => lines.push(`    ${line}`));
-      if (take.cameraNotes) wrapText(`Camera notes: ${take.cameraNotes}`, 88).forEach((line) => lines.push(`    ${line}`));
-      lines.push(`    Logged: ${new Date(take.createdAt || nowIso()).toLocaleString()}`);
+    sections.push({
+      type: 'day',
+      day: dayIndex + 1,
+      date: day.prodDay || '-',
+      takes: day.takes,
     });
-    lines.push('');
   });
+  return sections;
+}
+
+function wrapText(text, max = 90) {
+  const words = String(text ?? '').split(/\s+/).filter(Boolean);
+  if (!words.length) return [''];
+  const lines = [];
+  let line = '';
+  for (const word of words) {
+    const next = line ? `${line} ${word}` : word;
+    if (next.length > max) {
+      if (line) lines.push(line);
+      line = word;
+    } else {
+      line = next;
+    }
+  }
+  if (line) lines.push(line);
   return lines;
 }
 
@@ -548,83 +594,209 @@ function wrapText(text, max = 90) {
   return lines;
 }
 
-function createSimplePdf(lines, title) {
-  const pageWidth = 595.28;
-  const pageHeight = 841.89;
-  const marginX = 40;
-  const top = 52;
-  const bottom = 50;
-  const lineHeight = 14;
-  const linesPerPage = Math.floor((pageHeight - top - bottom) / lineHeight);
-  const pages = [];
-  for (let i = 0; i < lines.length; i += linesPerPage) pages.push(lines.slice(i, i + linesPerPage));
 
-  const objects = [];
-  const offsets = [];
-  const pushObj = (content) => { objects.push(content); return objects.length; };
-
-  const fontObj = pushObj('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>');
-  const pageIds = [];
-  const contentIds = [];
-  pages.forEach((pageLines, index) => {
-    const textParts = [];
-    let y = pageHeight - top;
-    textParts.push('BT');
-    textParts.push('/F1 11 Tf');
-    textParts.push(`1 0 0 1 ${marginX} ${y} Tm`);
-    textParts.push(`(${pdfEscape(title)}) Tj`);
-    y -= lineHeight * 1.6;
-    textParts.push(`/F1 9.5 Tf`);
-    pageLines.forEach((line) => {
-      textParts.push(`1 0 0 1 ${marginX} ${y} Tm`);
-      textParts.push(`(${pdfEscape(line)}) Tj`);
-      y -= lineHeight;
-    });
-    textParts.push('ET');
-    const stream = textParts.join('\n');
-    const contentId = pushObj(`<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`);
-    contentIds.push(contentId);
-    pageIds.push(null);
-  });
-
-  const pagesRootIdPlaceholder = objects.length + 1 + pages.length;
-  pages.forEach((_, idx) => {
-    const pageObj = `<< /Type /Page /Parent ${pagesRootIdPlaceholder} 0 R /MediaBox [0 0 ${pageWidth} ${pageHeight}] /Resources << /Font << /F1 ${fontObj} 0 R >> >> /Contents ${contentIds[idx]} 0 R >>`;
-    const pageId = pushObj(pageObj);
-    pageIds[idx] = pageId;
-  });
-  const kids = pageIds.map((id) => `${id} 0 R`).join(' ');
-  const pagesRootId = pushObj(`<< /Type /Pages /Kids [${kids}] /Count ${pageIds.length} >>`);
-  const catalogId = pushObj(`<< /Type /Catalog /Pages ${pagesRootId} 0 R >>`);
-
-  let pdf = '%PDF-1.4\n';
-  objects.forEach((obj, idx) => {
-    offsets[idx + 1] = pdf.length;
-    pdf += `${idx + 1} 0 obj\n${obj}\nendobj\n`;
-  });
-  const xrefOffset = pdf.length;
-  pdf += `xref\n0 ${objects.length + 1}\n`;
-  pdf += '0000000000 65535 f \n';
-  for (let i = 1; i <= objects.length; i++) {
-    pdf += `${String(offsets[i]).padStart(10, '0')} 00000 n \n`;
+function createPdfDoc(sections, title) {
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ unit: 'pt', format: 'letter' });
+  
+  const pageWidth = 612;
+  const pageHeight = 792;
+  const margin = 50;
+  const lineHeight = 12;
+  const maxLineWidth = pageWidth - 2 * margin;
+  
+  let y = margin + 30;
+  let pageNum = 1;
+  
+  const checkNewPage = function() {
+    if (y > pageHeight - margin) {
+      doc.addPage();
+      pageNum++;
+      y = margin + 30;
+    }
+  };
+  
+  const addLine = function(text, size, bold) {
+    if (size === undefined) size = 10;
+    if (bold === undefined) bold = false;
+    doc.setFontSize(size);
+    doc.setFont('helvetica', bold ? 'bold' : 'normal');
+    var lines = doc.splitTextToSize(text, maxLineWidth);
+    for (var i = 0; i < lines.length; i++) {
+      checkNewPage();
+      doc.text(lines[i], margin, y);
+      y += lineHeight;
+    }
+  };
+  
+  var totalPages = 1;
+  
+  for (var si = 0; si < sections.length; si++) {
+    var section = sections[si];
+    if (section.type === 'header') {
+      doc.setFontSize(18);
+      doc.setFont('helvetica', 'bold');
+      doc.text(title.toUpperCase(), pageWidth / 2, y, { align: 'center' });
+      y += 24;
+      doc.setFontSize(9);
+      doc.setFont('helvetica', 'normal');
+      doc.text(new Date().toLocaleString(), margin, y);
+      y += 20;
+    } else if (section.type === 'info') {
+      if (section.title) {
+        checkNewPage();
+        doc.setFontSize(12);
+        doc.setFont('helvetica', 'bold');
+        doc.text(section.title.toUpperCase(), margin, y);
+        y += 16;
+        doc.setDrawColor(180, 180, 180);
+        doc.line(margin, y - 4, pageWidth - margin, y - 4);
+      }
+      for (var ii = 0; ii < section.items.length; ii++) {
+        checkNewPage();
+        doc.setFontSize(10);
+        doc.setFont('helvetica', 'bold');
+        doc.text(section.items[ii].label + ':', margin, y);
+        doc.setFont('helvetica', 'normal');
+        doc.text(String(section.items[ii].value), margin + 60, y);
+        y += 11;
+      }
+      y += 8;
+    } else if (section.type === 'notes') {
+      checkNewPage();
+      doc.setFontSize(12);
+      doc.setFont('helvetica', 'bold');
+      doc.text('NOTES', margin, y);
+      y += 16;
+      doc.setFontSize(10);
+      var noteLines = doc.splitTextToSize(section.content, maxLineWidth);
+      for (var nl = 0; nl < noteLines.length; nl++) {
+        checkNewPage();
+        doc.text(noteLines[nl], margin, y);
+        y += 11;
+      }
+      y += 12;
+    } else if (section.type === 'day') {
+      checkNewPage();
+      doc.setFillColor(240, 240, 240);
+      doc.rect(margin - 10, y - 8, pageWidth - 2 * margin + 20, 22, 'F');
+      doc.setFontSize(12);
+      doc.setFont('helvetica', 'bold');
+      doc.text('DAY ' + section.day + ' - ' + section.date, margin, y);
+      y += 18;
+      if (section.takes.length === 0) {
+        doc.setFontSize(10);
+        doc.setFont('helvetica', 'normal');
+        doc.text('(No takes logged)', margin, y);
+        y += 15;
+      } else {
+        checkNewPage();
+        doc.setFontSize(8);
+        doc.setFont('helvetica', 'bold');
+        doc.text('SCENE  SETUP  TAKE   LENS          T-STOP   FILTER      CAMERA       STATUS', margin, y);
+        y += 10;
+        doc.setDrawColor(180, 180, 180);
+        doc.line(margin, y - 2, pageWidth - margin, y - 2);
+        y += 8;
+        for (var ti = 0; ti < section.takes.length; ti++) {
+          var take = section.takes[ti];
+          checkNewPage();
+          var scene = String(take.sceneNumber || '-').slice(0, 6);
+          var setup = String(take.setupLetter || '-').slice(0, 6);
+          var takeNum = String(take.takeNumber || 1);
+          var lens = take.lensSize === 'Custom' ? String(take.customLensSize || 'Custom').slice(0, 10) : String(take.lensSize || '-').slice(0, 10);
+          var speed = take.lensSpeed === 'Custom' ? String(take.customLensSpeed || 'Custom').slice(0, 8) : String(take.lensSpeed || '-').slice(0, 8);
+          var filter = take.filter === 'None' ? '-' : String(take.filter || '-').slice(0, 10);
+          var camera = take.camera === 'Custom' ? String(take.customCamera || 'Custom').slice(0, 10) : String(take.camera || '-').slice(0, 10);
+          var status = take.status === 'good' ? 'GOOD' : take.status === 'nogood' ? 'NO GOOD' : take.status === 'soft' ? 'SOFT' : take.status === 'flare' ? 'FLARE' : take.status === 'boom' ? 'BOOM' : '';
+          
+          doc.setFont('helvetica', 'normal');
+          doc.setFontSize(9);
+          doc.text(scene.padEnd(8) + setup.padEnd(8) + takeNum.padEnd(6) + lens.padEnd(12) + speed.padEnd(10) + filter.padEnd(12) + camera.padEnd(12) + status, margin, y);
+          y += 10;
+          
+          if (take.takeNotes) {
+            doc.setFontSize(8);
+            var tnotes = doc.splitTextToSize('Take: ' + take.takeNotes, maxLineWidth - 20);
+            for (var tn = 0; tn < tnotes.length; tn++) {
+              checkNewPage();
+              doc.text(tnotes[tn], margin + 10, y);
+              y += 9;
+            }
+          }
+          if (take.cameraNotes) {
+            doc.setFontSize(8);
+            var cnotes = doc.splitTextToSize('Camera: ' + take.cameraNotes, maxLineWidth - 20);
+            for (var cn = 0; cn < cnotes.length; cn++) {
+              checkNewPage();
+              doc.text(cnotes[cn], margin + 10, y);
+              y += 9;
+            }
+          }
+        }
+      }
+      y += 10;
+    }
   }
-  pdf += `trailer\n<< /Size ${objects.length + 1} /Root ${catalogId} 0 R >>\nstartxref\n${xrefOffset}\n%%EOF`;
-  return pdf;
-}
 
+  var pageCount = doc.internal.getNumberOfPages();
+  for (var p = 1; p <= pageCount; p++) {
+    doc.setPage(p);
+    doc.setFontSize(8);
+    doc.text('Page ' + p, pageWidth - 80, pageHeight - 30, { align: 'center' });
+  }
+
+  return doc.output('arraybuffer');
+}
 function exportProjectPdf(project) {
-  const lines = buildProjectReportLines(project);
-  const title = `${project.projectName || 'Untitled Project'} Report`;
-  const pdf = createSimplePdf(lines, title);
+  const sections = buildProjectReportSections(project);
+  const title = `${project.projectName || 'Untitled Project'}`;
+  const pdf = createPdfDoc(sections, title);
   const filename = safeFilename([project.projectName, project.prodCompany, 'Report'], 'pdf');
   downloadBlob(filename, pdf, 'application/pdf');
+}
+
+function exportProjectCsv(project) {
+  const rows = [['Day', 'Date', 'Scene', 'Setup', 'Take#', 'Lens', 'T-Stop', 'Filter', 'Camera', 'Status', 'Take Notes', 'Camera Notes', 'Created']];
+  project.productionDays.forEach((day, dayIdx) => {
+    day.takes.forEach((take) => {
+      const status = take.status === 'good' ? 'GOOD' : take.status === 'nogood' ? 'NO GOOD' : take.status === 'soft' ? 'SOFT' : take.status === 'flare' ? 'FLARE' : take.status === 'boom' ? 'BOOM' : '';
+      const lens = take.lensSize === 'Custom' ? take.customLensSize : take.lensSize;
+      const speed = take.lensSpeed === 'Custom' ? take.customLensSpeed : take.lensSpeed;
+      const camera = take.camera === 'Custom' ? take.customCamera : take.camera;
+      rows.push([
+        dayIdx + 1,
+        day.prodDay || '',
+        take.sceneNumber || '',
+        take.setupLetter || '',
+        take.takeNumber || 1,
+        lens,
+        speed,
+        take.filter,
+        camera,
+        status,
+        take.takeNotes || '',
+        take.cameraNotes || '',
+        take.createdAt || ''
+      ]);
+    });
+  });
+  const csv = rows.map(row => row.map(cell => {
+    const str = String(cell ?? '');
+    if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+      return `"${str.replace(/"/g, '""')}"`;
+    }
+    return str;
+  }).join(',')).join('\n');
+  const filename = safeFilename([project.projectName, project.prodCompany, 'Export'], 'csv');
+  downloadBlob(filename, csv, 'text/csv');
 }
 
 function projectStats(project) {
   const days = project.productionDays.length;
   const takes = project.productionDays.reduce((sum, day) => sum + day.takes.length, 0);
-  const goodTakes = project.productionDays.reduce((sum, day) => sum + day.takes.filter(t => t.isGood === true).length, 0);
-  const noGoodTakes = project.productionDays.reduce((sum, day) => sum + day.takes.filter(t => t.isGood === false).length, 0);
+  const goodTakes = project.productionDays.reduce((sum, day) => sum + day.takes.filter(t => t.status === 'good').length, 0);
+  const noGoodTakes = project.productionDays.reduce((sum, day) => sum + day.takes.filter(t => t.status === 'nogood').length, 0);
   return { days, takes, goodTakes, noGoodTakes };
 }
 
@@ -749,6 +921,7 @@ function homeView() {
 }
 
 function projectView(project) {
+  const stats = projectStats(project);
   return `
     <div class="app-shell stack">
       <header class="topbar">
@@ -756,7 +929,7 @@ function projectView(project) {
           <button class="icon-button" data-action="go-home" aria-label="Back">←</button>
           <div class="brand-text">
             <h1>${escapeHtml(project.projectName || 'Untitled Project')}</h1>
-            <p>${escapeHtml(project.prodCompany || 'No production company')} · Saved ${formatDateTime(state.lastSavedAt)}</p>
+            <p>${escapeHtml(project.prodCompany || 'No production company')} · ${stats.takes} takes · ${stats.goodTakes} ✓ · Saved ${formatDateTime(state.lastSavedAt)}</p>
           </div>
         </div>
         <div class="actions">
@@ -834,6 +1007,7 @@ function projectView(project) {
       <div class="footer-actions">
         <button class="button ghost" data-action="go-home">Projects</button>
         <button class="button" data-action="export-project" data-project-id="${project.id}">Save JSON</button>
+        <button class="button" data-action="export-csv" data-project-id="${project.id}">Export CSV</button>
         <button class="button primary" data-action="report-project" data-project-id="${project.id}">Export PDF</button>
       </div>
     </div>
@@ -861,8 +1035,8 @@ function selectField(key, label, options, value) {
 }
 
 function productionDayHtml(project, day, index) {
-  const dayGood = day.takes.filter(t => t.isGood === true).length;
-  const dayNoGood = day.takes.filter(t => t.isGood === false).length;
+  const dayGood = day.takes.filter(t => t.status === 'good').length;
+  const dayNoGood = day.takes.filter(t => t.status === 'nogood').length;
   const isExpanded = day.expanded !== false;
   return `
     <article class="day-card stack${isExpanded ? ' expanded' : ''}" data-project-id="${project.id}" data-day-id="${day.id}">
@@ -894,27 +1068,42 @@ function productionDayHtml(project, day, index) {
           <button type="button" class="button primary" data-action="add-take" data-project-id="${project.id}" data-day-id="${day.id}">Add new take</button>
         </div>
 
-        ${day.takes.length ? day.takes.map((take, takeIndex) => takeHtml(project, day, take, takeIndex)).join('') : '<div class="empty">No takes for this day yet.</div>'}
+        ${day.takes.length ? day.takes.map((take, takeIndex) => takeHtml(project, day, take, takeIndex, index)).join('') : '<div class="empty">No takes for this day yet.</div>'}
       </div>
     </article>
   `;
 }
 
-function takeHtml(project, day, take, takeIndex) {
+function takeHtml(project, day, take, takeIndex, dayIndex) {
   const lensSummary = take.lensSize === 'Custom' ? (take.customLensSize || 'Custom') : take.lensSize;
+  const lensSpeedSummary = take.lensSpeed === 'Custom' ? (take.customLensSpeed || 'Custom') : (take.lensSpeed || '');
   const filterSummary = take.filter || 'None';
-  const goodLabel = take.isGood === true ? '✓' : take.isGood === false ? '✗' : '';
-  const tagsSummary = [goodLabel, take.soft ? 'Soft' : '', take.flare ? 'Flare' : '', take.boomIn ? 'Boom' : ''].filter(Boolean).join(' · ');
+  const statusLabel = take.status === 'good' ? '✓' : take.status === 'nogood' ? '✗' : take.status === 'soft' ? 'Soft' : take.status === 'flare' ? 'Flare' : take.status === 'boom' ? 'Boom' : '';
   const isExpanded = take.expanded !== false;
-  const takeTitle = take.label ? `Take ${takeIndex + 1}: ${escapeHtml(take.label)}` : `Take ${takeIndex + 1}`;
+  const projName = project.projectName ? `${escapeHtml(project.projectName)} · ` : '';
+  const dayLabel = `Day ${dayIndex + 1}`;
+  const scenePart = take.sceneNumber ? `${escapeHtml(take.sceneNumber)}${take.setupLetter || ''}` : '';
+  const takePart = take.takeNumber || 1;
+  const labelPart = take.label ? `, ${escapeHtml(take.label)}` : '';
+  let takeTitle = '';
+  if (scenePart) {
+    takeTitle = `${projName}${dayLabel} · ${scenePart} Take ${takePart}${labelPart}`;
+  } else if (take.label) {
+    takeTitle = `${projName}${dayLabel} · Take ${takePart}${labelPart}`;
+  } else {
+    takeTitle = `${projName}${dayLabel} · Take ${takePart}`;
+  }
+  if (statusLabel) takeTitle += ` · ${statusLabel}`;
   
   return `
     <article class="take-card stack${isExpanded ? ' expanded' : ''}" data-project-id="${project.id}" data-day-id="${day.id}" data-take-id="${take.id}">
       <div class="take-head" data-action="toggle-take">
         <div>
-          <p class="take-title">${takeTitle} <span class="take-summary">${escapeHtml(lensSummary)} · ${escapeHtml(filterSummary)}${tagsSummary ? ' · ' + tagsSummary : ''}</span></p>
+          <p class="take-title">${takeTitle} <span class="take-summary">${escapeHtml(lensSummary)} ${escapeHtml(lensSpeedSummary)} · ${escapeHtml(filterSummary)}</span></p>
         </div>
         <div class="actions take-actions">
+          <button type="button" class="quick-mark-btn ${take.status === 'good' ? 'active good' : ''}" data-action="quick-good" data-project-id="${project.id}" data-day-id="${day.id}" data-take-id="${take.id}" data-value="good" title="Mark Good (G)">✓</button>
+          <button type="button" class="quick-mark-btn ${take.status === 'nogood' ? 'active bad' : ''}" data-action="quick-good" data-project-id="${project.id}" data-day-id="${day.id}" data-take-id="${take.id}" data-value="nogood" title="Mark No Good (N)">✗</button>
           <button type="button" class="icon-button collapse-btn" data-action="toggle-take" aria-label="Toggle take">
             <span class="collapse-icon">${isExpanded ? '−' : '+'}</span>
           </button>
@@ -924,16 +1113,37 @@ function takeHtml(project, day, take, takeIndex) {
       </div>
 
       <div class="take-content"${isExpanded ? '' : ' hidden'}>
-        <label class="field">
-          <span>Take label (optional)</span>
-          <input type="text" value="${escapeHtml(take.label || '')}" data-role="take-field" data-project-id="${project.id}" data-day-id="${day.id}" data-take-id="${take.id}" data-key="label" placeholder="e.g. Copy, Wide, Close-up" autocomplete="off" />
-        </label>
-
-        <div class="grid">
+        <div class="grid four-top">
           <label class="field">
-            <span>Lens size</span>
+            <span>Scene</span>
+            <input type="text" value="${escapeHtml(take.sceneNumber || '')}" data-role="take-field" data-project-id="${project.id}" data-day-id="${day.id}" data-take-id="${take.id}" data-key="sceneNumber" placeholder="e.g. 24" autocomplete="off" />
+          </label>
+          <label class="field">
+            <span>Setup</span>
+            <input type="text" value="${escapeHtml(take.setupLetter || '')}" data-role="take-field" data-project-id="${project.id}" data-day-id="${day.id}" data-take-id="${take.id}" data-key="setupLetter" placeholder="e.g. B" autocomplete="off" />
+          </label>
+          <label class="field">
+            <span>Take #</span>
+            <input type="number" min="1" value="${take.takeNumber || 1}" data-role="take-field" data-project-id="${project.id}" data-day-id="${day.id}" data-take-id="${take.id}" data-key="takeNumber" autocomplete="off" />
+          </label>
+          <label class="field">
+            <span>Label</span>
+            <input type="text" value="${escapeHtml(take.label || '')}" data-role="take-field" data-project-id="${project.id}" data-day-id="${day.id}" data-take-id="${take.id}" data-key="label" placeholder="e.g. Wide, Close-up" autocomplete="off" />
+          </label>
+        </div>
+
+        <div class="grid three">
+          <label class="field">
+            <span>Lens</span>
             <select data-role="take-field" data-project-id="${project.id}" data-day-id="${day.id}" data-take-id="${take.id}" data-key="lensSize">
               ${LENS_OPTIONS.map((item) => `<option value="${escapeHtml(item)}" ${take.lensSize === item ? 'selected' : ''}>${escapeHtml(item)}</option>`).join('')}
+            </select>
+          </label>
+
+          <label class="field">
+            <span>Speed</span>
+            <select data-role="take-field" data-project-id="${project.id}" data-day-id="${day.id}" data-take-id="${take.id}" data-key="lensSpeed">
+              ${LENS_SPEED_OPTIONS.map((item) => `<option value="${escapeHtml(item)}" ${take.lensSpeed === item ? 'selected' : ''}>${escapeHtml(item)}</option>`).join('')}
             </select>
           </label>
 
@@ -954,6 +1164,15 @@ function takeHtml(project, day, take, takeIndex) {
           </div>
         ` : ''}
 
+        ${take.lensSpeed === 'Custom' ? `
+          <div class="grid">
+            <label class="field">
+              <span>Custom lens speed</span>
+              <input type="text" value="${escapeHtml(take.customLensSpeed || '')}" data-role="take-field" data-project-id="${project.id}" data-day-id="${day.id}" data-take-id="${take.id}" data-key="customLensSpeed" />
+            </label>
+          </div>
+        ` : ''}
+
         <div class="grid">
           <label class="field">
             <span>Camera</span>
@@ -970,14 +1189,17 @@ function takeHtml(project, day, take, takeIndex) {
         </div>
 
         <div class="take-tags">
-          <span class="field-label">Status</span>
-          <div class="tag-buttons">
-            <button type="button" class="tag-btn ${take.isGood === true ? 'active good' : ''}" data-action="toggle-good" data-project-id="${project.id}" data-day-id="${day.id}" data-take-id="${take.id}" data-value="true">Good</button>
-            <button type="button" class="tag-btn ${take.isGood === false ? 'active bad' : ''}" data-action="toggle-good" data-project-id="${project.id}" data-day-id="${day.id}" data-take-id="${take.id}" data-value="false">No Good</button>
-            <button type="button" class="tag-btn ${take.soft ? 'active warning' : ''}" data-action="toggle-tag" data-project-id="${project.id}" data-day-id="${day.id}" data-take-id="${take.id}" data-key="soft">Soft</button>
-            <button type="button" class="tag-btn ${take.flare ? 'active warning' : ''}" data-action="toggle-tag" data-project-id="${project.id}" data-day-id="${day.id}" data-take-id="${take.id}" data-key="flare">Flare</button>
-            <button type="button" class="tag-btn ${take.boomIn ? 'active warning' : ''}" data-action="toggle-tag" data-project-id="${project.id}" data-day-id="${day.id}" data-take-id="${take.id}" data-key="boomIn">Boom in</button>
-          </div>
+          <label class="field">
+            <span>Status</span>
+            <select data-role="take-field" data-project-id="${project.id}" data-day-id="${day.id}" data-take-id="${take.id}" data-key="status">
+              <option value="" ${!take.status ? 'selected' : ''}>—</option>
+              <option value="good" ${take.status === 'good' ? 'selected' : ''}>✓ Good</option>
+              <option value="nogood" ${take.status === 'nogood' ? 'selected' : ''}>✗ No Good</option>
+              <option value="soft" ${take.status === 'soft' ? 'selected' : ''}>Soft</option>
+              <option value="flare" ${take.status === 'flare' ? 'selected' : ''}>Flare</option>
+              <option value="boom" ${take.status === 'boom' ? 'selected' : ''}>Boom in</option>
+            </select>
+          </label>
         </div>
 
         <label class="field">
@@ -1005,8 +1227,17 @@ function render() {
   
   app.innerHTML = project ? projectView(project) : homeView();
   requestAnimationFrame(() => {
-    const focusTarget = app.querySelector('[data-focus]');
-    if (focusTarget) focusTarget.focus();
+    if (state.focusTakeId) {
+      const el = document.querySelector(`[data-take-id="${state.focusTakeId}"]`);
+      if (el) {
+        const input = el.querySelector('input[data-key="sceneNumber"]');
+        if (input) input.focus();
+      }
+      state.focusTakeId = null;
+    } else {
+      const focusTarget = app.querySelector('[data-focus]');
+      if (focusTarget) focusTarget.focus();
+    }
   });
 }
 
@@ -1047,6 +1278,7 @@ document.addEventListener('click', async (event) => {
   if (action === 'open-guide' || action === 'project-guide') document.getElementById('guideDialog').showModal();
   if (action === 'duplicate-project') duplicateProject(projectId);
   if (action === 'export-project') { const project = state.projects.find((p) => p.id === projectId); if (project) exportProjectJson(project); }
+  if (action === 'export-csv') { const project = state.projects.find((p) => p.id === projectId); if (project) exportProjectCsv(project); }
   if (action === 'report-project') { const project = state.projects.find((p) => p.id === projectId); if (project) exportProjectPdf(project); }
   if (action === 'backup-all') backupAll();
   if (action === 'restore-all') filePicker.click();
@@ -1107,12 +1339,12 @@ document.addEventListener('click', async (event) => {
       }, { render: false });
     }
   }
-  if (action === 'toggle-good') {
-    const value = target.dataset.value === 'true';
+  if (action === 'toggle-good' || action === 'quick-good') {
+    const value = target.dataset.value;
     updateProject(projectId, (project) => {
       const day = project.productionDays.find((d) => d.id === dayId);
       const take = day?.takes.find((t) => t.id === takeId);
-      if (take) take.isGood = take.isGood === value ? null : value;
+      if (take) take.status = take.status === value ? '' : value;
       return project;
     });
   }
@@ -1166,13 +1398,18 @@ document.addEventListener('input', (event) => {
 
   if (role === 'take-field') {
     const { projectId, dayId, takeId, key } = el.dataset;
-    const shouldRender = ['lensSize', 'camera'].includes(key);
+    const shouldRender = ['lensSize', 'lensSpeed', 'camera'].includes(key);
     updateProject(projectId, (project) => {
       const day = project.productionDays.find((d) => d.id === dayId);
       const take = day?.takes.find((t) => t.id === takeId);
       if (!take) return project;
-      take[key] = el.value;
+      if (key === 'takeNumber') {
+        take[key] = parseInt(el.value, 10) || 1;
+      } else {
+        take[key] = el.value;
+      }
       if (key === 'lensSize' && el.value !== 'Custom') take.customLensSize = '';
+      if (key === 'lensSpeed' && el.value !== 'Custom') take.customLensSpeed = '';
       if (key === 'camera' && el.value !== 'Custom') take.customCamera = '';
       return project;
     }, { render: shouldRender });
@@ -1225,6 +1462,7 @@ if ('serviceWorker' in navigator) {
 }
 
 async function init() {
+  document.getElementById('year').textContent = new Date().getFullYear();
   try {
     await loadState();
     document.documentElement.dataset.theme = state.settings.theme;
@@ -1260,6 +1498,28 @@ document.addEventListener('keydown', (e) => {
         exportProjectJson(project);
         showToast('Project saved to device.');
       }
+    }
+  }
+  if ((e.metaKey || e.ctrlKey) && e.key === 'e') {
+    e.preventDefault();
+    if (state.currentProjectId) {
+      const project = currentProject();
+      if (project) {
+        exportProjectCsv(project);
+        showToast('CSV exported.');
+      }
+    }
+  }
+  if (!e.metaKey && !e.ctrlKey && !e.altKey && state.currentProjectId && !['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName)) {
+    if (e.key === 'g' || e.key === 'G') {
+      e.preventDefault();
+      const firstTake = document.querySelector('.take-card:not(.expanded) .quick-mark-btn[data-value="true"]');
+      if (firstTake) firstTake.click();
+    }
+    if (e.key === 'n' || e.key === 'N') {
+      e.preventDefault();
+      const firstTake = document.querySelector('.take-card:not(.expanded) .quick-mark-btn[data-value="false"]');
+      if (firstTake) firstTake.click();
     }
   }
   if ((e.metaKey || e.ctrlKey) && e.key === 'n' && !state.currentProjectId) {

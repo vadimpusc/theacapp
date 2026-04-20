@@ -3,7 +3,9 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self';" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self';" />
+  <meta http-equiv="X-Content-Type-Options" content="nosniff" />
+  <meta http-equiv="X-Frame-Options" content="DENY" />
   <meta name="theme-color" content="#f4f5f7" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
@@ -58,6 +60,16 @@
           <p><strong>Save to device</strong> exports one project as JSON. <strong>Backup all</strong> exports all projects in one file. Use <strong>Restore backup</strong> from the home screen to import previously saved data.</p>
         </section>
         <section>
+          <h4>Keyboard shortcuts</h4>
+          <ul>
+            <li><strong>G</strong> - Mark first take as Good</li>
+            <li><strong>N</strong> - Mark first take as No Good</li>
+            <li><strong>Ctrl+S</strong> - Save JSON</li>
+            <li><strong>Ctrl+E</strong> - Export CSV</li>
+            <li><strong>Esc</strong> - Close dialogs</li>
+          </ul>
+        </section>
+        <section>
           <h4>Install on phone</h4>
           <p>Open the app in Safari or Chrome, then use <strong>Add to Home Screen</strong>. It will launch in app style once installed.</p>
         </section>
@@ -72,8 +84,9 @@
   <input id="filePicker" type="file" accept="application/json,.json" hidden />
   <div id="toast-container" role="status" aria-live="polite"></div>
   <footer class="app-footer">
-    <p>© 2024 AC App · Made by <a href="https://sanrokuku.com" target="_blank" rel="noopener noreferrer">San Roku Ku</a></p>
+    <p>© <span id="year"></span> AC App · Made by <a href="https://sanrokuku.com" target="_blank" rel="noopener noreferrer">San Roku Ku</a></p>
   </footer>
+  <script defer src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script defer src="app.js"></script>
 </body>
 </html>
